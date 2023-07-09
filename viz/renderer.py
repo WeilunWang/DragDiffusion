@@ -311,9 +311,9 @@ class Renderer:
 
         # Run synthesis network.
         noise_pred, feat = G.unet(z, timestep, encoder_hidden_states=prompt_embeds, return_dict=False, return_feat=True)
+        extra_step_kwargs = G.prepare_extra_step_kwargs(generator=None, eta=0.0)
+        z_prev = G.scheduler.step(noise_pred.detach(), timestep, z.detach(), **extra_step_kwargs).prev_sample
         with torch.no_grad():
-            extra_step_kwargs = G.prepare_extra_step_kwargs(generator=None, eta=0.0)
-            z_prev = G.scheduler.step(noise_pred.detach(), timestep, z.detach(), **extra_step_kwargs).prev_sample
             img = G.decode_latents(z_prev)[0]
             img = torch.from_numpy(img)[None].permute(0, 3, 1, 2)
 
@@ -326,7 +326,7 @@ class Renderer:
             feat_resize = F.interpolate(feat, [h, w], mode='bilinear')
             if self.feat_refs is None:
                 self.feat0_resize = F.interpolate(feat.detach(), [h, w], mode='bilinear')
-                self.z0_resize = F.interpolate(z.detach(), [h, w], mode='bilinear')
+                self.z0_resize = F.interpolate(z_prev.detach(), [h, w], mode='bilinear')
                 self.feat_refs = []
                 for point in points:
                     py, px = round(point[0]), round(point[1])
@@ -371,7 +371,7 @@ class Renderer:
             if mask is not None:
                 if mask.min() == 0 and mask.max() == 1:
                     mask_usq = mask.to(self._device).unsqueeze(0).unsqueeze(0)
-                    z_resize = F.interpolate(z, [h, w], mode='bilinear')
+                    z_resize = F.interpolate(z_prev, [h, w], mode='bilinear')
                     loss_fix = F.l1_loss(z_resize * mask_usq, self.z0_resize.detach() * mask_usq)
                     loss += lambda_mask * loss_fix
 
